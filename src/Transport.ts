@@ -24,7 +24,7 @@ class TransportImpl {
 		const dsn = options.DSN;
 		if (!dsn) throw 'Invalid Sentry DSN: DSN not provided.';
 
-		const match = string.match(dsn, '^([^:]+)://([^:]+)@([^/]+)/(.+)$');
+		const match = string.match(dsn, '^([^:]+)://([^:]+)@([^/]+)/([^/]+)$');
 		assert(match, 'Invalid Sentry DSN: Scheme not found.');
 
 		const [_, schemeRaw, publicKeyRaw, authorityRaw, projectIdRaw] = match;
