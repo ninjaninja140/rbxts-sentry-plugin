@@ -1,7 +1,12 @@
 {
 	"name": "@nrbx/sentry-plugin",
 	"description": "A Sentry plugin for Roblox TypeScript projects, forked & ported from devSparkle/sentry-roblox",
-	"version": "1.0.2",
+	"author": "ninjaninja140",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/ninjaninja140/rbxts-sentry-plugin"
+	},
+	"version": "1.0.3",
 	"main": "out/init.luau",
 	"license": "MIT",
 	"scripts": {

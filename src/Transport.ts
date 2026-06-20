@@ -24,7 +24,7 @@ class TransportImpl {
 		const dsn = options.DSN;
 		if (!dsn) throw 'Invalid Sentry DSN: DSN not provided.';
 
-		const match = string.match(dsn, '^([^:]+)://([^:]+)@([^/]+)/([^/]+)$');
+		const match = string.match(dsn, '^(([^:]+)://([^:]+)@([^/]+)/([^/]+))$');
 		assert(match, 'Invalid Sentry DSN: Scheme not found.');
 
 		const [_, schemeRaw, publicKeyRaw, authorityRaw, projectIdRaw] = match;
@@ -34,7 +34,7 @@ class TransportImpl {
 		const projectId = projectIdRaw as string;
 
 		assert(scheme, 'Invalid Sentry DSN: Scheme not found.');
-		assert(string.match(string.lower(scheme), '^https?$'), 'Invalid Sentry DSN: Scheme not valid.');
+		assert(string.lower(scheme) === 'http' || string.lower(scheme) === 'https', 'Invalid Sentry DSN: Scheme not valid.');
 		assert(publicKey, 'Invalid Sentry DSN: Public Key not found.');
 		assert(authority, 'Invalid Sentry DSN: Authority not found.');
 		assert(projectId, 'Invalid Sentry DSN: Project ID not found.');
