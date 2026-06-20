@@ -38,7 +38,9 @@ const _DefaultsMod = require(script.WaitForChild('Defaults') as ModuleScript) as
 const { DEFAULT_OPTIONS, mergeOptions } = _DefaultsMod;
 const _HubMod = require(script.WaitForChild('Hub') as ModuleScript) as typeof import('./Hub');
 const _Hub = _HubMod.Hub;
-const _ScopeMod = require(script.WaitForChild('Scope') as ModuleScript) as typeof import('./Hub/Scope');
+const _ScopeMod = require(
+	script.WaitForChild('Hub').WaitForChild('Scope') as ModuleScript
+) as typeof import('./Hub/Scope');
 const _Scope = _ScopeMod.Scope;
 const _TransportMod = require(script.WaitForChild('Transport') as ModuleScript) as typeof import('./Transport');
 const _Transport = _TransportMod.Transport;
