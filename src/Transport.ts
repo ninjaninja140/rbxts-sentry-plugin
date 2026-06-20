@@ -34,7 +34,7 @@ class TransportImpl {
 		const projectId = projectIdRaw as string;
 
 		assert(scheme, 'Invalid Sentry DSN: Scheme not found.');
-		assert(string.match(string.lower(scheme), '^https?$')[0], 'Invalid Sentry DSN: Scheme not valid.');
+		assert(string.match(string.lower(scheme), '^https?$'), 'Invalid Sentry DSN: Scheme not valid.');
 		assert(publicKey, 'Invalid Sentry DSN: Public Key not found.');
 		assert(authority, 'Invalid Sentry DSN: Authority not found.');
 		assert(projectId, 'Invalid Sentry DSN: Project ID not found.');

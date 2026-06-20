@@ -1,7 +1,7 @@
 {
 	"name": "@nrbx/sentry-plugin",
 	"description": "A Sentry plugin for Roblox TypeScript projects, forked & ported from devSparkle/sentry-roblox",
-	"version": "1.0.1",
+	"version": "1.0.2",
 	"main": "out/init.luau",
 	"license": "MIT",
 	"scripts": {

@@ -35,6 +35,12 @@ Then add the following to your Rojo project file, under your `node_modules` conf
 }
 ```
 
+And this to your `tsconfig.json`
+
+```json
+"typeRoots": ["node_modules/@rbxts", "node_modules/@nrbx"],
+```
+
 ## Quick Start
 
 ```ts
