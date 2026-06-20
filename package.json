@@ -1,0 +1,30 @@
+{
+	"name": "@nrbx/sentry-plugin",
+	"description": "A Sentry plugin for Roblox TypeScript projects, forked & ported from devSparkle/sentry-roblox",
+	"version": "1.0.0",
+	"main": "out/init.luau",
+	"license": "MIT",
+	"scripts": {
+		"build": "rbxtsc",
+		"watch": "rbxtsc -w",
+		"biome": "biome check --write  --unsafe",
+		"prepublishOnly": "yarn run build"
+	},
+	"types": "out/index.d.ts",
+	"files": ["out", "!**/*.tsbuildinfo"],
+	"publishConfig": {
+		"access": "public"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.5.0",
+		"@rbxts/compiler-types": "^3.0.0-types.0",
+		"@rbxts/types": "^1.0.925",
+		"@typescript/native-preview": "^7.0.0-dev.20260620.1",
+		"roblox-ts": "^3.0.0",
+		"typescript": "^6.0.3"
+	},
+	"packageManager": "yarn@4.17.0",
+	"dependencies": {
+		"@rbxts/services": "^1.6.0"
+	}
+}
