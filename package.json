@@ -6,7 +6,7 @@
 		"type": "git",
 		"url": "https://github.com/ninjaninja140/rbxts-sentry-plugin"
 	},
-	"version": "1.0.3",
+	"version": "1.0.4",
 	"main": "out/init.luau",
 	"license": "MIT",
 	"scripts": {

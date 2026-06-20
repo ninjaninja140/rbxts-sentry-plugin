@@ -60,7 +60,7 @@ export function init(options?: SentryOptions): void {
 }
 
 function loadIntegrations(options: SentryOptions): void {
-	const integrationsFolder = script.Parent?.WaitForChild('Integrations');
+	const integrationsFolder = script.WaitForChild('Integrations');
 	if (options.DefaultIntegrations && integrationsFolder)
 		for (const child of integrationsFolder.GetChildren()) {
 			if (!child.IsA('ModuleScript')) continue;
