@@ -1,5 +1,11 @@
-import { RunService } from '@rbxts/services';
-import { type Hint, type Level, type SentryEvent, type ValidJSONValue, aggregateDictionaries } from 'Defaults';
+import type { Hint, Level, SentryEvent, ValidJSONValue } from 'Defaults';
+const LocalizationService = game.GetService('LocalizationService');
+const Players = game.GetService('Players');
+const RunService = game.GetService('RunService');
+const _Defaults = require(
+	script.Parent!.Parent!.WaitForChild('Defaults') as ModuleScript
+) as typeof import('../Defaults');
+const aggregateDictionaries = _Defaults.aggregateDictionaries;
 
 type EventProcessor = (event: SentryEvent, hint: Hint) => SentryEvent | undefined;
 
@@ -43,11 +49,9 @@ export class Scope {
 			return;
 		}
 		if (typeIs(player, 'Instance')) {
-			const localPlayer = RunService.IsClient() ? game.GetService('Players').LocalPlayer : undefined;
+			const localPlayer = RunService.IsClient() ? Players.LocalPlayer : undefined;
 			const isLocal = player === localPlayer;
-			const localeId = isLocal
-				? game.GetService('LocalizationService').SystemLocaleId
-				: (player as Player).LocaleId;
+			const localeId = isLocal ? LocalizationService.SystemLocaleId : (player as Player).LocaleId;
 			const parts = string.split(localeId, '-');
 			const countryCode = parts[1] !== undefined ? string.upper(parts[1]) : undefined;
 			this.user = {

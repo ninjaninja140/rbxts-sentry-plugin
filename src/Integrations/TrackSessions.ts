@@ -1,5 +1,6 @@
-import { HttpService, Players } from '@rbxts/services';
 import type { Hint, Integration as IntegrationType, SentryEvent } from 'Defaults';
+const HttpService = game.GetService('HttpService');
+const Players = game.GetService('Players');
 
 type HubLike = {
 	clone(): HubLike;

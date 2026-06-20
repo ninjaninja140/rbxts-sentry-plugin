@@ -1,5 +1,5 @@
-import { LogService } from '@rbxts/services';
 import type { Hint, Integration as IntegrationType, Level, SentryEvent } from 'Defaults';
+const LogService = game.GetService('LogService');
 
 type HubLike = {
 	options?: { CaptureWarnings?: boolean; CaptureInfos?: boolean; CaptureDebugs?: boolean };

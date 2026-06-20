@@ -6,7 +6,7 @@
 		"type": "git",
 		"url": "https://github.com/ninjaninja140/rbxts-sentry-plugin"
 	},
-	"version": "1.0.4",
+	"version": "1.0.5",
 	"main": "out/init.luau",
 	"license": "MIT",
 	"scripts": {
@@ -28,8 +28,5 @@
 		"roblox-ts": "^3.0.0",
 		"typescript": "^6.0.3"
 	},
-	"packageManager": "yarn@4.17.0",
-	"dependencies": {
-		"@rbxts/services": "^1.6.0"
-	}
+	"packageManager": "yarn@4.17.0"
 }

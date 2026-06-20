@@ -30,25 +30,36 @@
  * @packageDocumentation
  */
 
-import { RunService } from '@rbxts/services';
 import type { Hint, Integration, SentryEvent, SentryOptions } from './Defaults';
-import { DEFAULT_OPTIONS, mergeOptions } from './Defaults';
-import { Hub } from './Hub';
-import { Scope } from './Hub/Scope';
-import { Transport } from './Transport';
+import type { Hub } from './Hub';
+import type { Scope } from './Hub/Scope';
+
+const _DefaultsMod = require(script.WaitForChild('Defaults') as ModuleScript) as typeof import('./Defaults');
+const { DEFAULT_OPTIONS, mergeOptions } = _DefaultsMod;
+const _HubMod = require(script.WaitForChild('Hub') as ModuleScript) as typeof import('./Hub');
+const _Hub = _HubMod.Hub;
+const _ScopeMod = require(script.WaitForChild('Scope') as ModuleScript) as typeof import('./Hub/Scope');
+const _Scope = _ScopeMod.Scope;
+const _TransportMod = require(script.WaitForChild('Transport') as ModuleScript) as typeof import('./Transport');
+const _Transport = _TransportMod.Transport;
+const _ClientMod = require(
+	script.WaitForChild('Hub')?.WaitForChild('Client') as ModuleScript
+) as typeof import('./Hub/Client');
+
+const RunService = game.GetService('RunService');
 
 const SENTRY_PROTOCOL_VERSION = 7;
 const SENTRY_CLIENT = `sentry.roblox/1.0.0`;
-const currentHub = new Hub();
+const currentHub = new _Hub();
 
-export function init(options?: SentryOptions): void {
+function init(options?: SentryOptions): void {
 	if (!options) return;
 	if (!options.DSN) return warn('[SentrySD] No DSN provided. Sentry will not be initialized.');
 	if (!RunService.IsServer()) return warn('[SentrySDK] Sentry must be initialized from the server.');
 
 	const mergedOptions = mergeOptions(DEFAULT_OPTIONS, options);
 	currentHub.options = mergedOptions;
-	Transport.init(mergedOptions, SENTRY_PROTOCOL_VERSION, SENTRY_CLIENT);
+	_Transport.init(mergedOptions, SENTRY_PROTOCOL_VERSION, SENTRY_CLIENT);
 	currentHub.configureScope((scope) => {
 		scope.server_name = mergedOptions.ServerName;
 		scope.logger = 'server';
@@ -67,61 +78,90 @@ function loadIntegrations(options: SentryOptions): void {
 			const integration = require(child) as Integration;
 			if (integration.SetupOnce !== undefined)
 				task.spawn(() =>
-					integration.SetupOnce((processor) => Scope.addGlobalEventProcessor(processor), currentHub)
+					integration.SetupOnce((processor) => _Scope.addGlobalEventProcessor(processor), currentHub)
 				);
 		}
 }
 
-export function getCurrentHub(): Hub {
+function getCurrentHub(): Hub {
 	return currentHub;
 }
-export function captureEvent(event: SentryEvent, hint?: Hint): void {
+function captureEvent(event: SentryEvent, hint?: Hint): void {
 	currentHub.captureEvent(event, hint);
 }
-export function captureMessage(message: string, level?: 'fatal' | 'error' | 'warning' | 'info' | 'debug'): void {
+function captureMessage(message: string, level?: 'fatal' | 'error' | 'warning' | 'info' | 'debug'): void {
 	currentHub.captureMessage(message, level);
 }
-export function captureException(errorMessage?: string): undefined | ((...args: unknown[]) => void) {
+function captureException(errorMessage?: string): undefined | ((...args: unknown[]) => void) {
 	return currentHub.captureException(errorMessage);
 }
-export function configureScope(callback: (scope: Scope) => void): Hub {
+function configureScope(callback: (scope: Scope) => void): Hub {
 	return currentHub.configureScope(callback);
 }
-export function pushScope(): LuaTuple<[Hub, () => void]> {
+function pushScope(): LuaTuple<[Hub, () => void]> {
 	return currentHub.pushScope();
 }
-export function popScope(): Hub {
+function popScope(): Hub {
 	return currentHub.popScope();
 }
-export function setUser(player: Player | number | undefined): void {
+function setUser(player: Player | number | undefined): void {
 	currentHub.scope.setUser(player);
 }
-export function setTag(key: string, value: string): void {
+function setTag(key: string, value: string): void {
 	currentHub.scope.setTag(key, value);
 }
-export function setExtra(key: string, value: string | number | boolean): void {
+function setExtra(key: string, value: string | number | boolean): void {
 	currentHub.scope.setExtra(key, value);
 }
-export function setFingerprint(fingerprint: string[]): void {
+function setFingerprint(fingerprint: string[]): void {
 	currentHub.scope.setFingerprint(fingerprint);
 }
-export function startSession(): void {
+function startSession(): void {
 	currentHub.startSession();
 }
-export function endSession(): void {
+function endSession(): void {
 	currentHub.endSession();
 }
 
-export type {
-	Hint,
-	Integration,
-	SentryEvent,
-	SentryException,
-	SentryOptions,
-	SentryStackFrame,
-	SentryUser,
-} from './Defaults';
-export { Hub } from './Hub';
-export { Client } from './Hub/Client';
-export { Scope } from './Hub/Scope';
-export { Transport } from './Transport';
+const SentrySDK = {
+	init,
+	getCurrentHub,
+	captureEvent,
+	captureMessage,
+	captureException,
+	configureScope,
+	pushScope,
+	popScope,
+	setUser,
+	setTag,
+	setExtra,
+	setFingerprint,
+	startSession,
+	endSession,
+	Hub: _Hub,
+	Client: _ClientMod.Client,
+	Scope: _Scope,
+	Transport: _Transport,
+} as { [key: string]: unknown };
+export = SentrySDK as {
+	init: typeof init;
+	getCurrentHub: typeof getCurrentHub;
+	captureEvent: typeof captureEvent;
+	captureMessage: typeof captureMessage;
+	captureException: typeof captureException;
+	configureScope: typeof configureScope;
+	pushScope: typeof pushScope;
+	popScope: typeof popScope;
+	setUser: typeof setUser;
+	setTag: typeof setTag;
+	setExtra: typeof setExtra;
+	setFingerprint: typeof setFingerprint;
+	startSession: typeof startSession;
+	endSession: typeof endSession;
+	Hub: typeof import('./Hub').Hub;
+	Client: typeof import('./Hub/Client').Client;
+	Scope: typeof import('./Hub/Scope').Scope;
+	Transport: typeof import('./Transport').Transport;
+};
+
+// Types are accessible via the SentrySDK object or through type queries

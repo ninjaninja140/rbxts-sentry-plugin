@@ -1,5 +1,6 @@
-import { Players, RunService } from '@rbxts/services';
 import type { Hint, SentryEvent } from 'Defaults';
+const Players = game.GetService('Players');
+const RunService = game.GetService('RunService');
 
 function addGlobalEventProcessor(processor: (event: SentryEvent, hint: Hint) => SentryEvent | undefined): void {
 	const bindableFunction = new Instance('BindableFunction');

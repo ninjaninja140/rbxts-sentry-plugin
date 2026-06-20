@@ -1,7 +1,17 @@
-import { type Hint, type Level, type SentryEvent, type SentryOptions, deepCopy } from 'Defaults';
-import { Client } from 'Hub/Client';
-import { Scope } from 'Hub/Scope';
-import { Transport } from 'Transport';
+import type { Hint, Level, SentryEvent, SentryOptions } from 'Defaults';
+
+const _Defaults = require(script.Parent!.WaitForChild('Defaults') as ModuleScript) as typeof import('../Defaults');
+const { deepCopy } = _Defaults;
+const _ClientMod = require(script.WaitForChild('Client') as ModuleScript) as typeof import('./Client');
+const Client = _ClientMod.Client;
+type Client = InstanceType<typeof _ClientMod.Client>;
+const _ScopeMod = require(script.WaitForChild('Scope') as ModuleScript) as typeof import('./Scope');
+const Scope = _ScopeMod.Scope;
+type Scope = InstanceType<typeof _ScopeMod.Scope>;
+const _TransportMod = require(script.Parent!.WaitForChild('Transport') as ModuleScript) as typeof import('../Transport');
+const Transport = _TransportMod.Transport;
+type Transport = typeof _TransportMod.Transport;
+
 
 export class Hub {
 	public client: Client;

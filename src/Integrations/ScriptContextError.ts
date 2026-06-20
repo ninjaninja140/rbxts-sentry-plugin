@@ -1,5 +1,5 @@
-import { ScriptContext } from '@rbxts/services';
 import type { Hint, Integration as IntegrationType, SentryEvent } from 'Defaults';
+const ScriptContext = game.GetService('ScriptContext');
 
 type HubLike = {
 	options?: { CaptureErrors?: boolean };

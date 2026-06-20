@@ -1,4 +1,4 @@
-import { RunService } from '@rbxts/services';
+const RunService = game.GetService('RunService');
 
 export type ValidJSONValue = string | number | boolean;
 export type Level = 'fatal' | 'error' | 'warning' | 'info' | 'debug';

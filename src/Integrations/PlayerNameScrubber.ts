@@ -1,5 +1,5 @@
-import { Players } from '@rbxts/services';
 import type { Hint, Integration as IntegrationType, SentryEvent } from 'Defaults';
+const Players = game.GetService('Players');
 
 type HubLike = {
 	options?: { SendDefaultPII?: boolean };

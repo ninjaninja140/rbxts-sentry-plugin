@@ -1,5 +1,6 @@
-import { HttpService, RunService } from '@rbxts/services';
 import type { SentryOptions } from 'Defaults';
+const HttpService = game.GetService('HttpService');
+const RunService = game.GetService('RunService');
 
 // handles sending events to the Sentry API
 
