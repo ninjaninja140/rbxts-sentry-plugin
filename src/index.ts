@@ -34,18 +34,22 @@ import type { Hint, Integration, SentryEvent, SentryOptions } from './Defaults';
 import type { Hub } from './Hub';
 import type { Scope } from './Hub/Scope';
 
-const _DefaultsMod = require(script.WaitForChild('Defaults') as ModuleScript) as typeof import('./Defaults');
+function _getMod(name: string): ModuleScript {
+	return assert(script.FindFirstChild(name), `[SentrySDK] Missing module: ${name}`) as unknown as ModuleScript;
+}
+const _DefaultsMod = require(_getMod('Defaults')) as typeof import('./Defaults');
 const { DEFAULT_OPTIONS, mergeOptions } = _DefaultsMod;
-const _HubMod = require(script.WaitForChild('Hub') as ModuleScript) as typeof import('./Hub');
+const _HubMod = require(_getMod('Hub')) as typeof import('./Hub');
 const _Hub = _HubMod.Hub;
+const _hubFolder = _getMod('Hub');
 const _ScopeMod = require(
-	script.WaitForChild('Hub').WaitForChild('Scope') as ModuleScript
+	assert(_hubFolder.FindFirstChild('Scope'), '[SentrySDK] Missing module: Hub/Scope') as unknown as ModuleScript
 ) as typeof import('./Hub/Scope');
 const _Scope = _ScopeMod.Scope;
-const _TransportMod = require(script.WaitForChild('Transport') as ModuleScript) as typeof import('./Transport');
+const _TransportMod = require(_getMod('Transport')) as typeof import('./Transport');
 const _Transport = _TransportMod.Transport;
 const _ClientMod = require(
-	script.WaitForChild('Hub')?.WaitForChild('Client') as ModuleScript
+	assert(_hubFolder.FindFirstChild('Client'), '[SentrySDK] Missing module: Hub/Client') as unknown as ModuleScript
 ) as typeof import('./Hub/Client');
 
 const RunService = game.GetService('RunService');
@@ -73,7 +77,7 @@ function init(options?: SentryOptions): void {
 }
 
 function loadIntegrations(options: SentryOptions): void {
-	const integrationsFolder = script.WaitForChild('Integrations');
+	const integrationsFolder = script.FindFirstChild('Integrations');
 	if (options.DefaultIntegrations && integrationsFolder)
 		for (const child of integrationsFolder.GetChildren()) {
 			if (!child.IsA('ModuleScript')) continue;

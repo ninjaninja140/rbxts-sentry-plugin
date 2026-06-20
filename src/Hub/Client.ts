@@ -1,7 +1,9 @@
 import type { Hint, SentryEvent } from 'Defaults';
 import type { Scope } from 'Hub/Scope';
 const HttpService = game.GetService('HttpService');
-const _TransportMod = require(script.Parent!.Parent!.WaitForChild('Transport') as ModuleScript) as typeof import('../Transport');
+const _TransportMod = require(
+	assert(script.Parent?.Parent?.FindFirstChild('Transport'), '[SentrySDK] Missing module: Transport') as unknown as ModuleScript
+) as typeof import('../Transport');
 const Transport = _TransportMod.Transport;
 type Transport = typeof _TransportMod.Transport;
 

@@ -27,25 +27,42 @@ const Integration: IntegrationType = {
 			scope.setExtra('_mechanism_handled', 'false');
 		});
 
+		let isProcessing = false;
 		ScriptContext.Error.Connect((message: string, stackTrace: string, origin?: LuaSourceContainer) => {
-			const cleaned = (string.match(message, ':%d+: (.+)') as LuaTuple<unknown[]>)[0] ?? message;
+			// Prevent re-entrancy: if capturing this error would trigger another ScriptContext.Error,
+			// skip to avoid "Maximum event re-entrancy depth exceeded"
+			if (isProcessing) return;
+			isProcessing = true;
 
-			hub.captureEvent(
-				{
-					exception: {
-						type: cleaned as string,
-						mechanism: {
-							type: 'scriptcontext.error',
-							handled: false,
+			const [ok, cleaned] = pcall(() => {
+				const match = (string.match(message, ':%d+: (.+)') as LuaTuple<unknown[]>)[0];
+				return (match ?? message) as string;
+			});
+			if (!ok) {
+				isProcessing = false;
+				return;
+			}
+
+			const [captureOk] = pcall(() =>
+				hub.captureEvent(
+					{
+						exception: {
+							type: cleaned,
+							mechanism: {
+								type: 'scriptcontext.error',
+								handled: false,
+							},
 						},
 					},
-				},
-				{
-					message: cleaned,
-					traceback: stackTrace,
-					origin: origin,
-				} as Hint
+					{
+						message: cleaned,
+						traceback: stackTrace,
+						origin: origin,
+					} as Hint
+				)
 			);
+
+			isProcessing = false;
 		});
 	},
 };

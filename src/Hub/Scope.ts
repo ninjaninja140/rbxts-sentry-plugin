@@ -3,7 +3,7 @@ const LocalizationService = game.GetService('LocalizationService');
 const Players = game.GetService('Players');
 const RunService = game.GetService('RunService');
 const _Defaults = require(
-	script.Parent!.Parent!.WaitForChild('Defaults') as ModuleScript
+	assert(script.Parent?.Parent?.FindFirstChild('Defaults'), '[SentrySDK] Missing module: Defaults') as unknown as ModuleScript
 ) as typeof import('../Defaults');
 const aggregateDictionaries = _Defaults.aggregateDictionaries;
 

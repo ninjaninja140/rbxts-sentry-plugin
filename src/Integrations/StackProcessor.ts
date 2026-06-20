@@ -15,8 +15,10 @@ function convertStacktraceToFrames(event: SentryEvent, hint: Hint): SentryEvent 
 	const stacktraceFrames: SentryStackFrame[] = [];
 	let index = 0;
 
-	for (const lineUntyped of string.gmatch(traceback, '[^\n\r]+')) {
-		const line = lineUntyped as unknown as string;
+	const gmatchLines = string.gmatch(traceback, '[^\n\r]+') as unknown as () => string | undefined;
+	while (true) {
+		const line = gmatchLines();
+		if (line === undefined) break;
 		if ((string.match(line, '^Stack Begin$') as LuaTuple<unknown[]>)[0]) continue;
 		if ((string.match(line, '^Stack End$') as LuaTuple<unknown[]>)[0]) continue;
 		index++;
