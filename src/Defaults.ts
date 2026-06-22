@@ -1,21 +1,77 @@
-const RunService = game.GetService('RunService');
+import { RunService } from '@rbxts/services';
+import { Transport } from './Transport';
 
-export type ValidJSONValue = string | number | boolean;
+// -- Types
+
+export type ValidJSONValues = string | number | boolean;
 export type Level = 'fatal' | 'error' | 'warning' | 'info' | 'debug';
-export type Hint = Record<string, defined>;
+
+export interface Hint {
+	[key: string]: unknown;
+	event_id?: string;
+	message?: string;
+	traceback?: string;
+	environments?: Array<Record<string, unknown> | undefined>;
+	memory_category?: string;
+	thread?: thread;
+	thread_id?: string;
+	origin?: unknown;
+}
 
 export type Filter<T> = (value: T, hint: Hint) => T | undefined;
 
-export interface SentryStackFrame {
+export interface Options {
+	DSN?: string;
+	debug?: boolean;
+
+	DefaultIntegrations?: boolean;
+	Integrations: ModuleScript[];
+
+	Release?: string;
+	Environment?: string;
+
+	SendClientEvents?: boolean;
+	SendStudioEvents?: boolean;
+
+	SampleRate?: number;
+	MaxBreadcrumbs?: number;
+	AttachStacktrace?: boolean;
+	SendDefaultPII?: boolean;
+
+	ServerName?: string;
+
+	InAppInclude?: string[];
+	InAppExclude?: string[];
+
+	WithLocals?: boolean;
+
+	BeforeSend?: Filter<unknown>;
+	BeforeBreadcrumb?: Filter<unknown>;
+
+	Transport: typeof Transport;
+	ShutdownTimeout?: number;
+}
+
+export interface SdkInterface {
+	name: string;
+	version: string;
+}
+
+export interface StackFrame {
 	function?: string;
 	filename?: string;
 	lineno?: number;
 	module?: string;
-	vars?: Record<string, string | number>;
+	vars?: Record<string, string | number | undefined>;
 }
 
-export interface SentryMechanism {
-	data?: Record<string, defined>;
+export interface Stacktrace {
+	frames: StackFrame[];
+	registers?: Record<string, string>;
+}
+
+export interface Mechanism {
+	data?: Record<string, unknown>;
 	description?: string;
 	handled?: boolean;
 	help_link?: string;
@@ -23,26 +79,16 @@ export interface SentryMechanism {
 	type?: string;
 }
 
-export interface SentryException {
+export interface ExceptionEntry {
 	type?: string;
 	value?: string;
 	module?: string;
 	thread_id?: string;
-	mechanism?: SentryMechanism;
-	stacktrace?: {
-		frames: SentryStackFrame[];
-		registers?: Record<string, string>;
-	};
+	mechanism?: Mechanism;
+	stacktrace?: Stacktrace;
 }
 
-export interface SentryThread {
-	id: string;
-	stacktrace: {
-		frames: SentryStackFrame[];
-	};
-}
-
-export interface SentryGeo {
+export interface Geo {
 	city?: string;
 	country_code: string;
 	region?: string;
@@ -51,8 +97,8 @@ export interface SentryGeo {
 export interface SentryUser {
 	id: number;
 	username: string;
-	geo?: SentryGeo;
-	data?: Record<string, defined>;
+	geo?: Geo;
+	data?: Record<string, unknown>;
 	sid?: string;
 	started?: DateTime;
 }
@@ -67,120 +113,44 @@ export interface SentryError {
 	type: string;
 	path?: string;
 	details?: string;
+	name?: string;
 }
 
-export interface SentryEvent {
+export interface SentryThread {
+	id: string;
+	stacktrace?: Stacktrace;
+}
+
+export interface Event {
 	event_id?: string;
 	timestamp?: string | number;
 	platform?: 'other';
-
 	level?: Level;
 	logger?: string;
 	transaction?: string;
 	server_name?: string;
 	release?: string;
 	dist?: string;
-
 	tags?: Record<string, string>;
 	environment?: string;
 	modules?: Record<string, string>;
 	extra?: Record<string, string>;
 	fingerprint?: string[];
-
-	contexts?: Record<string, Record<string, ValidJSONValue>>;
-
-	sdk?: {
-		name: string;
-		version: string;
-		integrations?: string[];
-		packages?: Array<{
-			name: string;
-			version: string;
-		}>;
-	};
-
-	exception?: SentryException;
-	threads?: SentryThread[];
+	contexts?: Record<string, Record<string, unknown>>;
+	sdk?: SdkInterface & { integrations?: string[]; packages?: Array<{ name: string; version: string }> };
+	exception?: ExceptionEntry[];
 	user?: SentryUser;
 	message?: SentryMessage;
 	errors?: SentryError[];
-
-	/** @internal Internal event processors (not serialized) */
-	_event_processors?: Array<(event: SentryEvent, hint: Hint) => SentryEvent | undefined>;
+	threads?: SentryThread[];
+	_event_processors?: Array<(event: Event, hint: Hint) => Event | undefined>;
+	[key: string]: unknown;
 }
 
-export interface Integration {
-	Name: string;
-	SetupOnce(
-		addGlobalEventProcessor: (processor: (event: SentryEvent, hint: Hint) => SentryEvent | undefined) => void,
-		currentHub: unknown
-	): void;
-}
+// -- Default Options
 
-export interface SentryOptions {
-	/** The DSN for the sentry project to send events to */
-	DSN?: string;
-	/** Whether to enable debug logging */
-	Debug?: boolean;
-
-	/** Whether to enable the built-in integrations. Defaults to true. */
-	DefaultIntegrations?: boolean;
-	/** Additional integration modules */
-	Integrations?: ModuleScript[];
-
-	/** The release version string */
-	Release?: string;
-	/** The environment name (e.g. "production", "staging") */
-	Environment?: string;
-
-	/** Whether to send events from clients */
-	SendClientEvents?: boolean;
-	/** Whether to send events in Studio */
-	SendStudioEvents?: boolean;
-
-	/** Sample rate (0.0 to 1.0). Defaults to 1.0. */
-	SampleRate?: number;
-	/** Maximum number of breadcrumbs to store. Defaults to 100. */
-	MaxBreadcrumbs?: number;
-	/** Whether to attach stack traces to events */
-	AttachStacktrace?: boolean;
-	/** Whether to send default PII (player names, etc.) */
-	SendDefaultPII?: boolean;
-
-	/** Auto-capture ScriptContext errors (e.g. script runtime errors). Defaults to true. */
-	CaptureErrors?: boolean;
-	/** Auto-capture LogService warnings. Defaults to true. */
-	CaptureWarnings?: boolean;
-	/** Auto-capture LogService info/print messages. Defaults to false (noisy). */
-	CaptureInfos?: boolean;
-	/** Auto-capture LogService debug/output messages. Defaults to false (very noisy). */
-	CaptureDebugs?: boolean;
-
-	/** Server name identifier. Defaults to game.JobId or "local". */
-	ServerName?: string;
-
-	/** Modules to include as in-app frames */
-	InAppInclude?: string[];
-	/** Modules to exclude from in-app frames */
-	InAppExclude?: string[];
-
-	/** Whether to include local variables in stack traces */
-	WithLocals?: boolean;
-
-	/** Filter called before sending an event. Return undefined to drop. */
-	BeforeSend?: Filter<SentryEvent>;
-	/** Filter called before adding a breadcrumb */
-	BeforeBreadcrumb?: Filter<unknown>;
-
-	/** Transport instance override */
-	Transport?: unknown;
-	/** Timeout in seconds for shutdown */
-	ShutdownTimeout?: number;
-}
-
-export const DEFAULT_OPTIONS: Required<SentryOptions> = {
-	DSN: '',
-	Debug: false,
+export const DefaultOptions: Options = {
+	debug: false,
 
 	DefaultIntegrations: true,
 	Integrations: [],
@@ -196,11 +166,6 @@ export const DEFAULT_OPTIONS: Required<SentryOptions> = {
 	AttachStacktrace: false,
 	SendDefaultPII: false,
 
-	CaptureErrors: true,
-	CaptureWarnings: true,
-	CaptureInfos: false,
-	CaptureDebugs: false,
-
 	ServerName: game.JobId !== '' ? game.JobId : 'local',
 
 	InAppInclude: [],
@@ -208,50 +173,57 @@ export const DEFAULT_OPTIONS: Required<SentryOptions> = {
 
 	WithLocals: true,
 
-	BeforeSend: undefined as unknown as Filter<SentryEvent>,
-	BeforeBreadcrumb: undefined as unknown as Filter<unknown>,
-
-	Transport: undefined as unknown,
+	Transport: Transport as unknown as typeof Transport,
 	ShutdownTimeout: 2,
 };
 
-export const LEVELS: Level[] = ['fatal', 'error', 'warning', 'info', 'debug'];
+export const Levels: Level[] = ['fatal', 'error', 'warning', 'info', 'debug'];
 
-export function isValidLevel(level: unknown): level is Level {
-	return LEVELS.includes(level as Level);
+// -- Utility Functions
+
+export function IsValidLevel(level: Level | unknown): number | undefined {
+	const luaTable = table as unknown as { find: <T>(t: Array<T>, v: T) => number | undefined };
+	return luaTable.find(Levels, level as Level);
 }
 
-export function aggregateDictionaries<T extends object>(...dictionaries: T[]): T {
+export function AggregateDictionaries(...dictionaries: Array<Record<string, unknown>>): Record<string, unknown> {
 	const aggregate: Record<string, unknown> = {};
 
-	for (const dict of dictionaries) {
-		if (!dict) continue;
-		for (const [key, value] of pairs(dict)) {
-			const stringKey = key as string;
-			if (typeIs(value, 'table') && typeIs(aggregate[stringKey], 'table'))
-				aggregate[stringKey] = aggregateDictionaries(aggregate[stringKey] as object, value as object);
-			else aggregate[stringKey] = value;
+	for (const dictionary of dictionaries) {
+		for (const [index, value] of pairs(dictionary)) {
+			if (typeOf(value) === 'table' && typeOf(aggregate[index]) === 'table') {
+				aggregate[index] = AggregateDictionaries(
+					aggregate[index] as Record<string, unknown>,
+					value as Record<string, unknown>
+				);
+			} else {
+				aggregate[index] = value;
+			}
 		}
 	}
 
-	return aggregate as T;
+	return aggregate;
 }
 
-export function deepCopy<T>(source: T): T {
-	if (typeIs(source, 'table')) {
-		const copy = table.clone(source) as T;
-		for (const [key, value] of pairs(source as object))
-			(copy as Record<string, unknown>)[key as string] = deepCopy(value);
+export function DeepCopy<T>(tbl: T): T {
+	if (type(tbl) === 'table') {
+		const copied = setmetatable(
+			table.clone(tbl as unknown as object),
+			getmetatable(tbl as unknown as object) as never
+		) as T;
 
-		const mt = getmetatable(source as object);
-		if (mt) setmetatable(copy as object, mt);
+		for (const [index, value] of pairs(copied as unknown as object)) {
+			(copied as Record<string, unknown>)[DeepCopy(index) as string] = DeepCopy(value);
+		}
 
-		return copy;
+		return copied;
 	}
-	return source;
+
+	return tbl;
 }
 
-export function mergeOptions(base: SentryOptions, overrides?: SentryOptions): SentryOptions {
-	if (!overrides) return base;
-	return aggregateDictionaries<SentryOptions>(base, overrides);
+export function OverlapTables<B extends object, F extends object>(background: B, foreground?: F): F & B {
+	return setmetatable((foreground ?? {}) as object, {
+		__index: background as unknown as (self: object, index: unknown) => void,
+	}) as unknown as F & B;
 }

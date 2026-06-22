@@ -1,37 +1,64 @@
-import type { Hint, SentryEvent } from 'Defaults';
-import type { Scope } from 'Hub/Scope';
-const HttpService = game.GetService('HttpService');
-const _TransportMod = require(
-	assert(script.Parent?.Parent?.FindFirstChild('Transport'), '[SentrySDK] Missing module: Transport') as unknown as ModuleScript
-) as typeof import('../Transport');
-const Transport = _TransportMod.Transport;
-type Transport = typeof _TransportMod.Transport;
+import { HttpService } from '@rbxts/services';
+import type { Event, Hint, SdkInterface } from '../Defaults';
+import { Transport } from '../Transport';
+import type { Scope } from './Scope';
 
-export interface SentrySDKInfo {
-	name: string;
-	version: string;
-	integrations?: string[];
-	packages?: Array<{ name: string; version: string }>;
-}
+/**
+ * A Client is the part of the SDK that is responsible for event creation. To give
+ * an example, the Client should convert an exception to a Sentry event.
+ *
+ * The Client should be stateless, it gets the Scope injected and delegates the
+ * work of sending the event to the Transport.
+ */
+class Client {
+	public SDK_INTERFACE?: SdkInterface;
 
-export class Client {
-	public readonly SDK_INTERFACE: SentrySDKInfo = { name: 'sentry.roblox', version: '1.0.0' };
+	/**
+	 * Captures the event by merging it with other data with defaults from the client.
+	 *
+	 * In addition, if a scope is passed to this system, the data from the scope
+	 * passes it to the internal transport.
+	 */
+	public CaptureEvent(event: Event, hint?: Hint, scope?: Scope): void {
+		if (!hint) hint = {};
 
-	public captureEvent(event: SentryEvent, hint: Hint, scope: Scope): void {
-		if (!hint) hint = {} as Hint;
-		event.event_id =
-			(hint.event_id as string | undefined) ??
-			(string.gsub(HttpService.GenerateGUID(false), '-', '')[0] as string);
+		event.event_id = (hint.event_id as string) ?? string.gsub(HttpService.GenerateGUID(false), '-', '')[0];
 		event.timestamp = DateTime.now().UnixTimestamp;
 		event.sdk = this.SDK_INTERFACE;
 		event.platform = 'other';
-		const processed = scope.applyToEvent(event, hint);
-		if (!processed) return;
-		const [encodeSuccess, encodedPayload] = pcall(() => HttpService.JSONEncode(processed));
+
+		if (scope) {
+			event = scope.ApplyToEvent(event, hint) as Event;
+		}
+
+		if (!event) {
+			return;
+		}
+
+		const [encodeSuccess, encodedPayload] = pcall(() => HttpService.JSONEncode(event));
+
 		if (!encodeSuccess) return;
-		Transport.captureEvent(encodedPayload as string);
+
+		Transport.CaptureEvent(encodedPayload as string);
 	}
 
-	public close(_timeout?: number): void {}
-	public flush(_timeout?: number): void {}
+	/**
+	 * Flushes out the queue for up to timeout seconds. If the client can guarantee
+	 * delivery of events only up to the current point in time this is preferred. This
+	 * might block for timeout seconds.
+	 *
+	 * The client is disabled after this method is called.
+	 */
+	public Close(_timeout?: number): void {
+		// Not yet implemented
+	}
+
+	/**
+	 * Same as close difference is that the client is NOT disposed after invocation.
+	 */
+	public Flush(_timeout?: number): void {
+		// Not yet implemented
+	}
 }
+
+export { Client };

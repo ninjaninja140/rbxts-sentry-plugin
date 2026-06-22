@@ -1,117 +1,162 @@
-import type { SentryOptions } from 'Defaults';
-const HttpService = game.GetService('HttpService');
-const RunService = game.GetService('RunService');
+import { HttpService, RunService } from '@rbxts/services';
+import type { Options } from './Defaults';
 
-// handles sending events to the Sentry API
+/**
+ * The transport is an internal construct of the client that abstracts away
+ * the event sending. Typically the transport runs in a separate thread and
+ * gets events to send via a queue.
+ *
+ * The transport is responsible for sending, retrying and handling rate
+ * limits. The transport might also persist unsent events across restarts
+ * if needed.
+ */
+export class Transport {
+	public static BaseUrl = '';
+	public static AuthHeader = '';
+	public static InitThread = false;
 
-interface HttpResponse {
-	Body: string;
-	Headers: Record<string, string>;
-	StatusCode: number;
-	StatusMessage: string;
-	Success: boolean;
-}
+	private static limitUntil = 0;
 
-class TransportImpl {
-	private baseUrl = '';
-	private authHeader = '';
-	private initThread = false;
-	private rateLimitUntil = 0;
+	private static requestAsync(requestOptions: RequestAsyncRequest): RequestAsyncResponse {
+		if (DateTime.now().UnixTimestamp < Transport.limitUntil) {
+			return {
+				Body: '',
+				Headers: {},
+				StatusCode: 429,
+				StatusMessage: 'Too Many Requests',
+				Success: false,
+			};
+		}
 
-	public init(options: SentryOptions, protocolVersion: number, sentryClient: string): void {
-		if (this.initThread) return;
-		this.initThread = true;
+		const [callSuccess, response] = pcall(() => HttpService.RequestAsync(requestOptions));
+		const finalResponse: RequestAsyncResponse = callSuccess
+			? (response as RequestAsyncResponse)
+			: {
+					Body: '',
+					Headers: {},
+					StatusCode: 400,
+					StatusMessage: 'InternalError',
+					Success: false,
+				};
 
-		const dsn = options.DSN;
-		if (!dsn) throw 'Invalid Sentry DSN: DSN not provided.';
+		const rateLimitReset = finalResponse.Headers[string.lower('X-Sentry-Rate-Limit-Reset')];
+		const remaining = finalResponse.Headers[string.lower('X-Sentry-Rate-Limit-Remaining')] ?? math.huge;
 
-		const match = string.match(dsn, '^(([^:]+)://([^:]+)@([^/]+)/([^/]+))$');
-		assert(match, 'Invalid Sentry DSN: Scheme not found.');
+		if (rateLimitReset !== undefined && remaining !== undefined) {
+			Transport.limitUntil = remaining as unknown as number;
+		} else if (finalResponse.StatusCode === 429) {
+			Transport.limitUntil =
+				DateTime.now().UnixTimestamp +
+				((finalResponse.Headers[string.lower('Retry-After')] as unknown as number) ?? 60);
+		}
 
-		const [_, schemeRaw, publicKeyRaw, authorityRaw, projectIdRaw] = match;
-		const scheme = schemeRaw as string;
-		const publicKey = publicKeyRaw as string;
-		const authority = authorityRaw as string;
-		const projectId = projectIdRaw as string;
-
-		assert(scheme, 'Invalid Sentry DSN: Scheme not found.');
-		assert(string.lower(scheme) === 'http' || string.lower(scheme) === 'https', 'Invalid Sentry DSN: Scheme not valid.');
-		assert(publicKey, 'Invalid Sentry DSN: Public Key not found.');
-		assert(authority, 'Invalid Sentry DSN: Authority not found.');
-		assert(projectId, 'Invalid Sentry DSN: Project ID not found.');
-
-		this.baseUrl = `${scheme}://${authority}/api/${projectId}/`;
-		this.authHeader = `Sentry sentry_key=${publicKey},sentry_version=${protocolVersion},sentry_client=${sentryClient}`;
-
-		this.createRelays();
+		return finalResponse;
 	}
 
-	public captureEvent(encodedPayload: string): HttpResponse {
-		if (!this.initThread) return this.relayCall('CaptureEvent', encodedPayload) as HttpResponse;
-		return this.request({
-			Url: `${this.baseUrl}store/`,
+	public static _GetRelay(): RemoteFunction | BindableFunction | undefined {
+		if (RunService.IsClient()) {
+			// return script.FindFirstChild("ClientRelay") as RemoteFunction;
+		} else {
+			return script.FindFirstChild('ServerRelay') as BindableFunction;
+		}
+
+		return undefined;
+	}
+
+	public static _Relay(...args: unknown[]): void {
+		const relay = Transport._GetRelay();
+		if (!relay) return;
+
+		if (relay.IsA('RemoteFunction')) {
+			relay.InvokeServer(...args);
+		} else {
+			relay.Invoke(...args);
+		}
+	}
+
+	public static CaptureEvent(encodedPayload: string): RequestAsyncResponse | undefined {
+		if (!Transport.InitThread) {
+			Transport._Relay('CaptureEvent', encodedPayload);
+			return undefined;
+		}
+
+		return Transport.requestAsync({
+			Url: `${Transport.BaseUrl}store/`,
 			Method: 'POST',
-			Headers: { 'Content-Type': 'application/json', 'X-Sentry-Auth': this.authHeader },
+			Headers: {
+				'Content-Type': 'application/json',
+				'X-Sentry-Auth': Transport.AuthHeader,
+			},
 			Body: encodedPayload,
 		});
 	}
 
-	public captureEnvelope(payload: unknown): HttpResponse {
-		if (!this.initThread) return this.relayCall('CaptureEnvelope', payload) as HttpResponse;
-		const payloadStr = HttpService.JSONEncode(payload);
+	public static CaptureEnvelope(payload: unknown): RequestAsyncResponse | undefined {
+		if (!Transport.InitThread) {
+			Transport._Relay('CaptureEnvelope', payload);
+			return undefined;
+		}
+
+		const encodedPayload = HttpService.JSONEncode(payload);
 		const envelope = HttpService.JSONEncode({ event_id: HttpService.GenerateGUID(false) });
-		const item = HttpService.JSONEncode({ type: 'session', length: payloadStr.size() });
-		return this.request({
-			Url: `${this.baseUrl}envelope/`,
+		const item = HttpService.JSONEncode({ type: 'session', length: encodedPayload.size() });
+
+		return Transport.requestAsync({
+			Url: `${Transport.BaseUrl}envelope/`,
 			Method: 'POST',
-			Headers: { 'Content-Type': 'application/x-sentry-envelope', 'X-Sentry-Auth': this.authHeader },
-			Body: `${envelope}\n${item}\n${payloadStr}`,
+			Headers: {
+				'Content-Type': 'application/x-sentry-envelope',
+				'X-Sentry-Auth': Transport.AuthHeader,
+			},
+			Body: `${envelope}\n${item}\n${encodedPayload}`,
 		});
 	}
 
-	private request(requestOptions: RequestAsyncRequest): HttpResponse {
-		if (DateTime.now().UnixTimestamp < this.rateLimitUntil)
-			return { Body: '', Headers: {}, StatusCode: 429, StatusMessage: 'Too Many Requests', Success: false };
-		const [callSuccess, response] = pcall(() => HttpService.RequestAsync(requestOptions));
-		const result: HttpResponse = callSuccess
-			? (response as HttpResponse)
-			: { Body: '', Headers: {}, StatusCode: 400, StatusMessage: 'InternalError', Success: false };
-		const rateLimitReset = result.Headers[string.lower('X-Sentry-Rate-Limit-Reset')];
-		const remaining = result.Headers[string.lower('X-Sentry-Rate-Limit-Remaining')];
-		if (rateLimitReset && remaining) this.rateLimitUntil = tonumber(remaining) ?? 0;
-		else if (result.StatusCode === 429)
-			this.rateLimitUntil =
-				DateTime.now().UnixTimestamp + (tonumber(result.Headers[string.lower('Retry-After')]) ?? 60);
+	public static Init(options: Options, sentryProtocolVersion: number, sentryClient: string): void {
+		assert(
+			!script.FindFirstChildWhichIsA('BindableFunction'),
+			'The SentrySDK Transport can only be initialized once!'
+		);
+		assert(
+			!script.FindFirstChildWhichIsA('RemoteFunction'),
+			'The SentrySDK Transport can only be initialized once!'
+		);
 
-		return result;
-	}
+		Transport.InitThread = true;
 
-	private relayCall(functionName: string, ...args: unknown[]): unknown {
-		const relay = this.getRelay();
-		if (!relay) return;
-		if (relay.IsA('RemoteFunction')) return relay.InvokeServer(functionName, ...args);
-		return (relay as BindableFunction).Invoke(functionName, ...args);
-	}
+		// Process DSN
+		const dsn = options.DSN ?? '';
+		const [scheme, publicKey, authority, projectId] = string.match(dsn, '^([^:]+)://([^:]+)@([^/]+)/(.+)$');
 
-	private getRelay(): RemoteFunction | BindableFunction | undefined {
-		if (RunService.IsClient()) return undefined;
-		return script.FindFirstChild('ServerRelay') as BindableFunction;
-	}
+		assert(scheme, 'Invalid Sentry DSN: Scheme not found.');
+		assert(
+			(string.lower(scheme as string) as string).match('^https?$')[0] !== undefined,
+			'Invalid Sentry DSN: Scheme not valid.'
+		);
+		assert(publicKey, 'Invalid Sentry DSN: Public Key not found.');
+		assert(authority, 'Invalid Sentry DSN: Authority not found.');
+		assert(projectId, 'Invalid Sentry DSN: Project ID not found.');
 
-	private createRelays(): void {
+		Transport.BaseUrl = `${scheme}://${authority}/api/${projectId}/`;
+		Transport.AuthHeader = `Sentry sentry_key=${publicKey},sentry_version=${sentryProtocolVersion},sentry_client=${sentryClient}`;
+
+		// Set up relays
 		const serverRelay = new Instance('BindableFunction');
 		serverRelay.Name = 'ServerRelay';
 		serverRelay.Parent = script;
+
 		serverRelay.OnInvoke = (functionName: string, ...args: unknown[]) => {
-			const transportSelf = this as unknown as Record<string, Callback>;
-			const fn = transportSelf[functionName as string];
-			if (fn) return fn(...args);
+			return (Transport as unknown as Record<string, Callback>)[functionName](Transport, ...args);
 		};
+
 		const clientRelay = new Instance('RemoteFunction');
 		clientRelay.Name = 'ClientRelay';
 		clientRelay.Parent = script;
-		clientRelay.OnServerInvoke = (_player: Player, ...args: unknown[]) => serverRelay.Invoke(...args);
+
+		clientRelay.OnServerInvoke = (_player: Player, ...args: unknown[]) => {
+			// TODO: Player input validation
+			// TODO: Forced user scope
+			return serverRelay.Invoke(...args);
+		};
 	}
 }
-
-export const Transport = new TransportImpl();

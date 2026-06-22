@@ -1,160 +1,256 @@
-import type { Hint, Level, SentryEvent, ValidJSONValue } from 'Defaults';
-const LocalizationService = game.GetService('LocalizationService');
-const Players = game.GetService('Players');
-const RunService = game.GetService('RunService');
-const _Defaults = require(
-	assert(script.Parent?.Parent?.FindFirstChild('Defaults'), '[SentrySDK] Missing module: Defaults') as unknown as ModuleScript
-) as typeof import('../Defaults');
-const aggregateDictionaries = _Defaults.aggregateDictionaries;
+import { LocalizationService, Players, RunService } from '@rbxts/services';
+import {
+	AggregateDictionaries,
+	type Event,
+	type Hint,
+	type Level,
+	type SentryUser,
+	type ValidJSONValues,
+} from '../Defaults';
 
-type EventProcessor = (event: SentryEvent, hint: Hint) => SentryEvent | undefined;
+type EventProcessor = (event: Event, hint: Hint) => Event | undefined;
 
-export class Scope {
+// Luau table helpers (available at runtime but not fully typed in roblox-ts)
+const luaTable = table as unknown as {
+	insert: <T>(t: Array<T>, ...args: unknown[]) => void;
+	find: <T>(t: Array<T>, v: T) => number | undefined;
+};
+const tableInsert = (t: Array<unknown>, ...args: unknown[]) => luaTable.insert(t, ...args);
+const tableFind = <T>(t: Array<T>, v: T) => luaTable.find(t, v);
+
+/**
+ * A scope holds data that should implicitly be sent with Sentry events.
+ * It can hold context data, extra parameters, level overrides, fingerprints etc.
+ *
+ * The user can modify the current scope (to set extra, tags, current user) through
+ * the global function configure_scope. configure_scope takes a callback function
+ * to which it passes the current scope.
+ */
+class Scope {
+	public extra: Record<string, string> = {};
+	public contexts: Record<string, Record<string, unknown>> = {};
+	public tags: Record<string, string> = {};
+
+	public _event_processors: EventProcessor[] = [];
+
 	public level?: Level;
 	public transaction?: string;
 	public fingerprint?: string[];
-	public user?: SentryEvent['user'];
-	public logger?: string;
+	public user?: SentryUser;
 	public server_name?: string;
+	public logger?: string;
 	public release?: string;
 	public environment?: string;
 	public dist?: string;
-	public extra: Record<string, ValidJSONValue> = {};
-	public tags: Record<string, string> = {};
-	public contexts: Record<string, Record<string, ValidJSONValue>> = {};
-	private eventProcessors: EventProcessor[] = [];
+	public exception?: Array<Record<string, unknown>>;
 
-	public static addGlobalEventProcessor(
-		processor: (event: SentryEvent, hint: Hint) => SentryEvent | undefined
-	): void {
-		const bf = new Instance('BindableFunction');
-		bf.SetAttribute(
+	/**
+	 * @private
+	 * Registers a global event processor as a BindableFunction child of the script.
+	 */
+	public _AddGlobalEventProcessor(fn: EventProcessor): void {
+		const bindableFunction = new Instance('BindableFunction');
+
+		bindableFunction.SetAttribute(
 			'RunContext',
-			RunService.IsClient()
-				? (Enum.RunContext.Client as unknown as AttributeValue)
-				: (Enum.RunContext.Server as unknown as AttributeValue)
+			(RunService.IsClient() ? Enum.RunContext.Client : Enum.RunContext.Server) as unknown as AttributeValue
 		);
-		bf.Name = 'GlobalEventProcessor';
-		bf.OnInvoke = processor;
-		bf.Parent = script;
+		bindableFunction.Name = 'GlobalEventProcessor';
+		bindableFunction.OnInvoke = fn;
+		bindableFunction.Parent = script;
 	}
 
-	public configureScope(callback: (scope: Scope) => void): void {
+	constructor() {
+		this.extra = {};
+		this.contexts = {};
+		this.tags = {};
+		this._event_processors = [];
+	}
+
+	/**
+	 * The reason for this callback-based API is efficiency. If the SDK is disabled, it
+	 * should not invoke the callback, thus avoiding unnecessary work.
+	 */
+	public ConfigureScope(callback: (scope: this) => void): void {
 		callback(this);
 	}
 
-	public setUser(player: Player | number | undefined): void {
+	/**
+	 * Adds information of the given player to each event sent.
+	 * Only one user may be associated with a Scope at any given time.
+	 * Calling this method will override the current user.
+	 * When no player is provided, any existing player information is removed.
+	 *
+	 * The `UserId`, `Name` and country-code of the player is sent.
+	 */
+	public SetUser(player: Player | number | undefined): void {
 		if (player === undefined) {
 			this.user = undefined;
 			return;
 		}
+
 		if (typeIs(player, 'Instance')) {
-			const localPlayer = RunService.IsClient() ? Players.LocalPlayer : undefined;
-			const isLocal = player === localPlayer;
-			const localeId = isLocal ? LocalizationService.SystemLocaleId : (player as Player).LocaleId;
-			const parts = string.split(localeId, '-');
-			const countryCode = parts[1] !== undefined ? string.upper(parts[1]) : undefined;
+			const isLocal = player === Players.LocalPlayer;
+			const localeId = isLocal ? LocalizationService.SystemLocaleId : player.LocaleId;
+			const countryCode = string.split(localeId, '-')[1];
+
 			this.user = {
-				id: (player as Player).UserId,
-				username: (player as Player).Name,
+				id: player.UserId,
+				username: player.Name,
 				data: {
-					AccountAge: (player as Player).AccountAge,
-					Character: (player as Player).Character !== undefined,
-					MembershipType: (player as Player).MembershipType.Name,
-					Team: (player as Player).Team ? tostring((player as Player).Team) : undefined,
-				} as Record<string, defined>,
-				geo: { city: 'Unknown', country_code: countryCode ?? 'XX', region: countryCode },
+					AccountAge: player.AccountAge,
+					Character: player.Character !== undefined,
+					MembershipType: player.MembershipType.Name,
+					Team: player.Team ? tostring(player.Team) : undefined,
+				},
+				geo: {
+					city: 'Unknown',
+					country_code: countryCode ? string.upper(countryCode) : '',
+					region: countryCode ?? undefined,
+				},
 			};
-		} else if (typeIs(player, 'number')) this.user = { id: player, username: '' };
+		} else if (typeIs(player, 'number')) {
+			this.user = { id: player, username: '' };
+		}
 	}
 
-	public setExtra(key: string, value: ValidJSONValue): void {
-		this.extra[key] = value;
+	public SetExtra(key: string, value: ValidJSONValues): void {
+		this.extra[key] = tostring(value);
 	}
-	public setExtras(dict: Record<string, ValidJSONValue>): void {
-		for (const [k, v] of pairs(dict)) this.extra[k] = v;
+
+	public SetExtras(dictionary: Record<string, ValidJSONValues>): void {
+		for (const [key, value] of pairs(dictionary)) {
+			this.extra[key] = tostring(value);
+		}
 	}
-	public setTag(key: string, value: string): void {
-		this.tags[key] = value;
+
+	public SetTag(key: string, value: ValidJSONValues): void {
+		this.tags[key] = tostring(value);
 	}
-	public setTags(dict: Record<string, string>): void {
-		for (const [k, v] of pairs(dict)) this.tags[k] = v;
+
+	public SetTags(dictionary: Record<string, ValidJSONValues>): void {
+		for (const [key, value] of pairs(dictionary)) {
+			this.tags[key] = tostring(value);
+		}
 	}
-	public setContext(key: string, value: Record<string, ValidJSONValue>): void {
+
+	public SetContext(key: string, value: Record<string, unknown>): void {
 		this.contexts[key] = value;
 	}
-	public setLevel(level: Level): void {
+
+	public SetLevel(level: Level): void {
 		this.level = level;
 	}
-	public setTransaction(name: string): void {
-		this.transaction = name;
+
+	public SetTransaction(transactionName: string): void {
+		this.transaction = transactionName;
 	}
-	public setFingerprint(fingerprint: string[]): void {
+
+	public SetFingerprint(fingerprint: string[]): void {
 		this.fingerprint = fingerprint;
 	}
-	public addEventProcessor(processor: EventProcessor): void {
-		this.eventProcessors.push(processor);
+
+	public AddEventProcessor(processor: EventProcessor): void {
+		tableInsert(this._event_processors, processor);
 	}
 
-	public clear(): void {
-		const empty = new Scope();
-		for (const [key] of pairs(this))
-			(this as unknown as Record<string, unknown>)[key as string] = (empty as unknown as Record<string, unknown>)[
-				key as string
-			];
+	public Clear(): void {
+		const emptyScope = new Scope();
+
+		for (const [key] of pairs(this as unknown as Record<string, unknown>)) {
+			rawset(this as unknown as object, key, rawget(emptyScope as unknown as object, key));
+		}
 	}
 
-	public clone(): Scope {
-		const cloned = table.clone(this) as Scope;
-		cloned.extra = table.clone(this.extra);
-		cloned.tags = table.clone(this.tags);
-		cloned.contexts = table.clone(this.contexts);
-		cloned.eventProcessors = table.clone(this.eventProcessors);
-		setmetatable(cloned, getmetatable(this) as LuaMetatable<Scope>);
-		return cloned;
+	public Clone(): Scope {
+		return setmetatable(table.clone(this) as object, getmetatable(this) as never) as Scope;
 	}
 
-	public addBreadcrumb(_breadcrumb: unknown): void {
-		warn('WIP: Scope:addBreadcrumb not implemented.');
-	}
-	public clearBreadcrumbs(): void {
-		warn('WIP: Scope:clearBreadcrumbs not implemented.');
+	public AddBreadcrumb(_breadcrumb: unknown): void {
+		print('WIP: The function "Scope:AddBreadcrumb" is not yet implemented.');
 	}
 
-	public applyToEvent(event: SentryEvent, hint: Hint): SentryEvent | undefined {
-		let mergedEvent = aggregateDictionaries<SentryEvent>(this as unknown as SentryEvent, event);
-		const processors = table.clone(this.eventProcessors);
-		mergedEvent._event_processors = undefined;
-		if (mergedEvent.contexts && next(mergedEvent.contexts)[0] === undefined) mergedEvent.contexts = undefined;
-		if (mergedEvent.extra && next(mergedEvent.extra)[0] === undefined) mergedEvent.extra = undefined;
+	public ClearBreadcrumbs(): void {
+		print('WIP: The function "Scope:ClearBreadcrumbs" is not yet implemented.');
+	}
 
-		const globalProcessors = script.GetChildren().filter((child) => {
-			if (child.Name !== 'GlobalEventProcessor') return false;
-			const runContext = child.GetAttribute('RunContext') as number | undefined;
-			if (RunService.IsClient() && runContext !== (Enum.RunContext.Client as unknown as number)) return false;
-			if (RunService.IsServer() && runContext !== (Enum.RunContext.Server as unknown as number)) return false;
-			return true;
-		});
-
-		for (const proc of globalProcessors) {
-			const bindable = proc as BindableFunction;
-			processors.insert(0, (e: SentryEvent, h: Hint) => bindable.Invoke(e, h) as SentryEvent | undefined);
+	public ApplyToEvent(event: Event, hint: Hint): Event | undefined {
+		for (const [index, value] of pairs(this as unknown as Record<string, unknown>)) {
+			if (typeOf(value) === 'table' && typeOf(event[index]) === 'table') {
+				if (index === 'exception') {
+					const exceptions = (event.exception ?? []) as Array<Record<string, unknown>>;
+					for (const [, exceptionValue] of ipairs(value as Array<Record<string, unknown>>)) {
+						const excIdx = (tableFind(exceptions, exceptionValue) ?? exceptions.size()) - 1;
+						if (excIdx >= 0 && excIdx < exceptions.size()) {
+							exceptions[excIdx] = AggregateDictionaries(exceptions[excIdx], exceptionValue) as Record<
+								string,
+								unknown
+							>;
+						}
+					}
+				} else {
+					event[index] = AggregateDictionaries(
+						event[index] as Record<string, unknown>,
+						value as Record<string, unknown>
+					);
+				}
+			} else {
+				event[index] = value;
+			}
 		}
 
-		for (const processor of processors) {
-			const [success, result] = pcall(() => processor(mergedEvent, hint));
+		const eventProcessors = table.clone(this._event_processors) as EventProcessor[];
+		event._event_processors = undefined;
+
+		if (event.contexts && (event.contexts as unknown as Array<unknown>).size() === 0) {
+			event.contexts = undefined;
+		}
+
+		if (event.extra && (event.extra as unknown as Array<unknown>).size() === 0) {
+			event.extra = undefined;
+		}
+
+		// Collect global event processors from script children
+		for (const child of script.GetChildren()) {
+			if (!child.IsA('BindableFunction')) continue;
+			if (child.Name !== 'GlobalEventProcessor') continue;
+			if (
+				RunService.IsClient() &&
+				(child.GetAttribute('RunContext') as unknown as Enum.RunContext) !== Enum.RunContext.Client
+			)
+				continue;
+			if (
+				RunService.IsServer() &&
+				(child.GetAttribute('RunContext') as unknown as Enum.RunContext) !== Enum.RunContext.Server
+			)
+				continue;
+
+			tableInsert(eventProcessors, 1, (evt: Event, hnt: Hint) => {
+				return child.Invoke(evt, hnt) as Event | undefined;
+			});
+		}
+
+		for (const processor of eventProcessors) {
+			const [success, response] = pcall(processor, event, hint);
+
 			if (success) {
-				if (result === undefined) return undefined;
-				mergedEvent = result as SentryEvent;
+				event = response as Event;
+
+				if (!event) {
+					break;
+				}
 			} else {
-				mergedEvent.errors = mergedEvent.errors ?? [];
-				mergedEvent.errors.push({
+				event.errors = event.errors ?? [];
+				tableInsert(event.errors, {
 					type: 'unknown_error',
 					details: 'Encountered error when calling an EventProcessor.',
-					path: result as string,
+					name: response as string,
 				});
 			}
 		}
-		return mergedEvent;
+
+		return event;
 	}
 }
+
+export { Scope };

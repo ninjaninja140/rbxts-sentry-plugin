@@ -105,14 +105,14 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@nrbx/sentry-plugin@workspace:.":
+"@nrbx/sentry-sdk@workspace:.":
   version: 0.0.0-use.local
-  resolution: "@nrbx/sentry-plugin@workspace:."
+  resolution: "@nrbx/sentry-sdk@workspace:."
   dependencies:
     "@biomejs/biome": "npm:^2.5.0"
     "@rbxts/compiler-types": "npm:^3.0.0-types.0"
+    "@rbxts/services": "npm:^1.6.0"
     "@rbxts/types": "npm:^1.0.925"
-    "@typescript/native-preview": "npm:^7.0.0-dev.20260620.1"
     roblox-ts: "npm:^3.0.0"
     typescript: "npm:^6.0.3"
   languageName: unknown
@@ -122,6 +122,13 @@ __metadata:
   version: 3.0.0-types.0
   resolution: "@rbxts/compiler-types@npm:3.0.0-types.0"
   checksum: 10c0/5cb03da94893f905ce2d7aed4604d78303c4831d76bbdd260e12a2d19b3326695dae6214d7fd3a29ac0a175ff84f1c74e9ba1b4cdd4206e5a676e8d69fdebefa
+  languageName: node
+  linkType: hard
+
+"@rbxts/services@npm:^1.6.0":
+  version: 1.6.0
+  resolution: "@rbxts/services@npm:1.6.0"
+  checksum: 10c0/52bbd13cea8a85000d1772f602b5f49d06e4482bb75c441ffb197285b0b1521b5d749ea5d7f505773f6f58162bbb1f8e61dc8ed5f84350c4c6a30720649f827d
   languageName: node
   linkType: hard
 
@@ -156,87 +163,6 @@ __metadata:
     ajv: "npm:^8.17.1"
     fs-extra: "npm:^11.2.0"
   checksum: 10c0/36ad12c742d2651238d9bef2d34eacfb8e165278f8fb7a661098969c2021a4c899b6489a7cf7493dbea31cda2e80d3bacf743ed1d2fa9c6be485753dfb9f8457
-  languageName: node
-  linkType: hard
-
-"@typescript/native-preview-darwin-arm64@npm:7.0.0-dev.20260620.1":
-  version: 7.0.0-dev.20260620.1
-  resolution: "@typescript/native-preview-darwin-arm64@npm:7.0.0-dev.20260620.1"
-  conditions: os=darwin & cpu=arm64
-  languageName: node
-  linkType: hard
-
-"@typescript/native-preview-darwin-x64@npm:7.0.0-dev.20260620.1":
-  version: 7.0.0-dev.20260620.1
-  resolution: "@typescript/native-preview-darwin-x64@npm:7.0.0-dev.20260620.1"
-  conditions: os=darwin & cpu=x64
-  languageName: node
-  linkType: hard
-
-"@typescript/native-preview-linux-arm64@npm:7.0.0-dev.20260620.1":
-  version: 7.0.0-dev.20260620.1
-  resolution: "@typescript/native-preview-linux-arm64@npm:7.0.0-dev.20260620.1"
-  conditions: os=linux & cpu=arm64
-  languageName: node
-  linkType: hard
-
-"@typescript/native-preview-linux-arm@npm:7.0.0-dev.20260620.1":
-  version: 7.0.0-dev.20260620.1
-  resolution: "@typescript/native-preview-linux-arm@npm:7.0.0-dev.20260620.1"
-  conditions: os=linux & cpu=arm
-  languageName: node
-  linkType: hard
-
-"@typescript/native-preview-linux-x64@npm:7.0.0-dev.20260620.1":
-  version: 7.0.0-dev.20260620.1
-  resolution: "@typescript/native-preview-linux-x64@npm:7.0.0-dev.20260620.1"
-  conditions: os=linux & cpu=x64
-  languageName: node
-  linkType: hard
-
-"@typescript/native-preview-win32-arm64@npm:7.0.0-dev.20260620.1":
-  version: 7.0.0-dev.20260620.1
-  resolution: "@typescript/native-preview-win32-arm64@npm:7.0.0-dev.20260620.1"
-  conditions: os=win32 & cpu=arm64
-  languageName: node
-  linkType: hard
-
-"@typescript/native-preview-win32-x64@npm:7.0.0-dev.20260620.1":
-  version: 7.0.0-dev.20260620.1
-  resolution: "@typescript/native-preview-win32-x64@npm:7.0.0-dev.20260620.1"
-  conditions: os=win32 & cpu=x64
-  languageName: node
-  linkType: hard
-
-"@typescript/native-preview@npm:^7.0.0-dev.20260620.1":
-  version: 7.0.0-dev.20260620.1
-  resolution: "@typescript/native-preview@npm:7.0.0-dev.20260620.1"
-  dependencies:
-    "@typescript/native-preview-darwin-arm64": "npm:7.0.0-dev.20260620.1"
-    "@typescript/native-preview-darwin-x64": "npm:7.0.0-dev.20260620.1"
-    "@typescript/native-preview-linux-arm": "npm:7.0.0-dev.20260620.1"
-    "@typescript/native-preview-linux-arm64": "npm:7.0.0-dev.20260620.1"
-    "@typescript/native-preview-linux-x64": "npm:7.0.0-dev.20260620.1"
-    "@typescript/native-preview-win32-arm64": "npm:7.0.0-dev.20260620.1"
-    "@typescript/native-preview-win32-x64": "npm:7.0.0-dev.20260620.1"
-  dependenciesMeta:
-    "@typescript/native-preview-darwin-arm64":
-      optional: true
-    "@typescript/native-preview-darwin-x64":
-      optional: true
-    "@typescript/native-preview-linux-arm":
-      optional: true
-    "@typescript/native-preview-linux-arm64":
-      optional: true
-    "@typescript/native-preview-linux-x64":
-      optional: true
-    "@typescript/native-preview-win32-arm64":
-      optional: true
-    "@typescript/native-preview-win32-x64":
-      optional: true
-  bin:
-    tsgo: bin/tsgo.js
-  checksum: 10c0/aac68afec6cf63e695249bedf8ab0398d53e8021121672020bfb9ef7c00f984fcce3a29f5366840172065973eb9cd400dad3dfa58e8447db75479b1a2cc6e160
   languageName: node
   linkType: hard
 

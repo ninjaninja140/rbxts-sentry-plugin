@@ -1,140 +1,193 @@
-import type { Hint, Level, SentryEvent, SentryOptions } from 'Defaults';
+import { DeepCopy, type Event, type Hint, type Level, type Options } from '../Defaults';
+import { Client } from './Client';
+import { Scope } from './Scope';
 
-function _getMod(name: string): ModuleScript {
-	return assert(script.FindFirstChild(name), `[SentrySDK] Missing module: Hub/${name}`) as unknown as ModuleScript;
-}
-function _getSibling(name: string): ModuleScript {
-	return assert(script.Parent?.FindFirstChild(name), `[SentrySDK] Missing module: ${name}`) as unknown as ModuleScript;
-}
-const _Defaults = require(_getSibling('Defaults')) as typeof import('../Defaults');
-const { deepCopy } = _Defaults;
-const _ClientMod = require(_getMod('Client')) as typeof import('./Client');
-const Client = _ClientMod.Client;
-type Client = InstanceType<typeof _ClientMod.Client>;
-const _ScopeMod = require(_getMod('Scope')) as typeof import('./Scope');
-const Scope = _ScopeMod.Scope;
-type Scope = InstanceType<typeof _ScopeMod.Scope>;
-const _TransportMod = require(_getSibling('Transport')) as typeof import('../Transport');
-const Transport = _TransportMod.Transport;
-type Transport = typeof _TransportMod.Transport;
+// Luau table helpers (available at runtime but not fully typed in roblox-ts)
+const luaTable = table as unknown as { insert: <T>(t: Array<T>, ...args: unknown[]) => void };
+const tableInsert = (t: Array<unknown>, ...args: unknown[]) => luaTable.insert(t, ...args);
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const debugGetMemoryCategory = (debug as unknown as { getmemorycategory: () => string }).getmemorycategory;
 
-
-export class Hub {
-	public client: Client;
-	public scope: Scope;
-	public options?: SentryOptions;
+/**
+ * The hub consists of a stack of clients and scopes.
+ *
+ * The SDK maintains two variables: The main hub (a global variable) and the current
+ * hub (a variable local to the current thread or execution context, also sometimes
+ * known as async local or context local).
+ */
+class Hub {
+	public Client: Client;
+	public Scope: Scope;
+	public Options?: Readonly<Options>;
 
 	constructor(client?: Client, scope?: Scope) {
-		this.client = client ?? new Client();
-		this.scope = scope ?? new Scope();
+		this.Client = client ?? new Client();
+		this.Scope = scope ?? new Scope();
 	}
 
-	public clone(): Hub {
-		return new Hub(this.client, this.scope.clone());
+	public Clone(): Hub {
+		return new Hub(this.Client, this.Scope.Clone());
 	}
-	public getCurrentHub(): Hub {
+
+	public GetCurrentHub(): Hub {
 		return this;
 	}
 
-	public captureEvent(event: SentryEvent, hint?: Hint): void {
-		if (this.options) {
-			if (this.options.SampleRate === 0) return;
-			if (math.random() > (this.options.SampleRate ?? 1)) return;
+	public CaptureEvent(event: Event, hint?: Hint): void {
+		if (this.Options) {
+			if (this.Options.SampleRate === 0) return;
+			if (math.random() > (this.Options.SampleRate ?? 1)) {
+				return;
+			}
 		}
-		this.client.captureEvent(event, hint ?? ({} as Hint), this.scope);
+
+		this.Client.CaptureEvent(event, hint, this.Scope);
 	}
 
-	public captureMessage(message: string, level?: Level): void {
-		this.captureEvent({ level: level ?? 'info', message: { formatted: message, message: message } });
+	public CaptureMessage(message: string, level?: Level): void {
+		this.CaptureEvent({
+			level: level ?? 'info',
+			message: {
+				formatted: message, // TODO: Remove PII (player names, user IDs)
+				message,
+			},
+		});
 	}
 
-	public captureException(errorMessage?: string): undefined | ((...args: unknown[]) => void) {
-		if (errorMessage === undefined)
+	public CaptureException(errorMessage?: string): ((...args: unknown[]) => void) | void {
+		if (errorMessage === undefined) {
 			return (...args: unknown[]) => {
-				const msg = args[0] !== undefined ? tostring(args[0]) : 'Unknown error';
-				this.captureException(msg);
+				this.CaptureException(args[0] as string);
 			};
+		}
 
 		const thread = coroutine.running();
-		const event: SentryEvent = {
-			exception: { type: errorMessage, thread_id: string.gsub(tostring(thread), 'thread: ', '')[0] },
-		};
-		const envTrace: defined[] = [];
-		let envCount = 1;
-		while (
-			pcall(() => {
-				const env = getfenv(envCount) as defined;
-				envTrace.push(env);
-			})
-		)
-			envCount++;
+		const threadId = string.gsub(tostring(thread), 'thread: ', '')[0];
 
-		const originEnv = envTrace[0] as { script?: Instance } | undefined;
-		if (originEnv?.script) event.exception!.module = tostring(originEnv.script);
-		this.captureEvent(event, {
+		const event: Event = {
+			exception: [
+				{
+					type: errorMessage,
+					thread_id: threadId,
+				},
+			],
+		};
+
+		const envTrace: Array<Record<string, unknown> | undefined> = [];
+		let envCount = 1;
+
+		if (this.Options) {
+			// Luau getfenv equivalent - collect environment tables
+			while (
+				pcall(() => {
+					const env = getfenv(envCount);
+					tableInsert(envTrace, envCount, env);
+				})[0]
+			) {
+				envCount += 1;
+			}
+		}
+
+		const originEnv = envTrace[0];
+
+		if (originEnv) {
+			if (originEnv.script) {
+				event.exception![0].module = tostring(originEnv.script);
+				event.exception![0].thread_id = threadId;
+			}
+		}
+
+		return this.CaptureEvent(event, {
 			message: errorMessage,
 			traceback: debug.traceback(),
 			environments: envTrace,
-			memory_category: (debug as unknown as { getmemorycategory: () => string }).getmemorycategory(),
-			thread: thread,
-			thread_id: event.exception!.thread_id,
-		} as Hint);
-	}
-
-	public pushScope(): LuaTuple<[Hub, () => void]> {
-		const oldScope = this.scope;
-		const newScope = deepCopy(oldScope);
-		setmetatable(newScope, getmetatable(oldScope) as LuaMetatable<Scope>);
-		this.scope = newScope;
-		return $tuple(this, () => {
-			this.scope = oldScope;
+			memory_category: debugGetMemoryCategory(),
+			thread,
+			thread_id: threadId,
 		});
 	}
 
-	public popScope(): Hub {
-		const mt = getmetatable(this.scope);
-		if (mt) this.scope = (mt as LuaMetatable<Scope> & { __index: Scope }).__index;
+	public PushScope(): LuaTuple<[Hub, () => void]> {
+		const oldScope = this.Scope;
+		const newScope = setmetatable(DeepCopy(oldScope) as object, {
+			__index: oldScope as unknown as (self: object, index: unknown) => void,
+		}) as Scope;
+
+		this.Scope = newScope;
+
+		return $tuple(this, () => {
+			this.Scope = oldScope;
+		});
+	}
+
+	public WithScope(): void {
+		// Unreleased
+	}
+
+	public PopScope(): Hub {
+		this.Scope = (getmetatable(this.Scope) as { __index: Scope }).__index;
+
 		return this;
 	}
 
-	public configureScope(callback: (scope: Scope) => void): Hub {
-		this.scope.configureScope(callback);
+	public ConfigureScope(callback: (scope: Scope) => void): Hub {
+		this.Scope.ConfigureScope(callback);
+
 		return this;
 	}
-	public getClient(): Client {
-		return this.client;
-	}
-	public bindClient(client: Client): void {
-		this.client = client;
-	}
-	public unbindClient(): void {
-		this.bindClient(undefined as unknown as Client);
+
+	public GetClient(): Client {
+		return this.Client;
 	}
 
-	public startSession(): void {
-		const ct = DateTime.now();
-		Transport.captureEnvelope({
-			sid: this.scope.user?.sid,
-			did: this.scope.user?.id !== undefined ? tostring(this.scope.user.id) : undefined,
-			seq: ct.UnixTimestampMillis,
-			timestamp: ct.ToIsoDate(),
-			started: this.scope.user?.started?.ToIsoDate() ?? ct.ToIsoDate(),
+	public BindClient(client: Client): void {
+		this.Client = client;
+	}
+
+	public UnbindClient(): void {
+		this.BindClient(undefined as unknown as Client);
+	}
+
+	public StartSession(): void {
+		if (!this.Options) return;
+		if (!this.Scope.user) return;
+
+		const currentTime = DateTime.now();
+
+		this.Options.Transport.CaptureEnvelope({
+			sid: this.Scope.user.sid,
+			did: tostring(this.Scope.user.id),
+			seq: currentTime.UnixTimestampMillis,
+			timestamp: currentTime.ToIsoDate(),
+			started: this.Scope.user.started!.ToIsoDate(),
 			init: true,
 			status: 'ok',
-			attrs: { release: this.scope.release, environment: this.scope.environment },
+			attrs: {
+				release: this.Scope.release,
+				environment: this.Scope.environment,
+			},
 		});
 	}
 
-	public endSession(): void {
-		const ct = DateTime.now();
-		Transport.captureEnvelope({
-			sid: this.scope.user?.sid,
-			did: this.scope.user?.id !== undefined ? tostring(this.scope.user.id) : undefined,
-			seq: ct.UnixTimestampMillis,
-			timestamp: ct.ToIsoDate(),
-			started: this.scope.user?.started?.ToIsoDate() ?? ct.ToIsoDate(),
+	public EndSession(): void {
+		if (!this.Options) return;
+		if (!this.Scope.user) return;
+
+		const currentTime = DateTime.now();
+
+		this.Options.Transport.CaptureEnvelope({
+			sid: this.Scope.user.sid,
+			did: tostring(this.Scope.user.id),
+			seq: currentTime.UnixTimestampMillis,
+			timestamp: currentTime.ToIsoDate(),
+			started: this.Scope.user.started!.ToIsoDate(),
 			status: 'exited',
-			attrs: { release: this.scope.release, environment: this.scope.environment },
+			attrs: {
+				release: this.Scope.release,
+				environment: this.Scope.environment,
+			},
 		});
 	}
 }
+
+export { Hub };

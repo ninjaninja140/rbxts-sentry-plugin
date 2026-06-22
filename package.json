@@ -1,13 +1,13 @@
 {
-	"name": "@nrbx/sentry-plugin",
-	"description": "A Sentry plugin for Roblox TypeScript projects, forked & ported from devSparkle/sentry-roblox",
+	"name": "@nrbx/sentry-sdk",
+	"description": "A Sentry SDK for Roblox TypeScript projects, forked & ported from devSparkle/sentry-roblox",
 	"author": "ninjaninja140",
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/ninjaninja140/rbxts-sentry-plugin"
 	},
-	"version": "1.0.8",
-	"main": "out/init.luau",
+	"version": "1.0.7",
+	"main": "out/init.lua",
 	"license": "MIT",
 	"scripts": {
 		"build": "rbxtsc",
@@ -16,7 +16,7 @@
 		"prepublishOnly": "yarn run build"
 	},
 	"types": "out/index.d.ts",
-	"files": ["out", "!**/*.tsbuildinfo"],
+	"files": ["out", "README.md", "LICENSE.txt", "!**/*.tsbuildinfo"],
 	"publishConfig": {
 		"access": "public"
 	},
@@ -24,9 +24,11 @@
 		"@biomejs/biome": "^2.5.0",
 		"@rbxts/compiler-types": "^3.0.0-types.0",
 		"@rbxts/types": "^1.0.925",
-		"@typescript/native-preview": "^7.0.0-dev.20260620.1",
 		"roblox-ts": "^3.0.0",
 		"typescript": "^6.0.3"
 	},
-	"packageManager": "yarn@4.17.0"
+	"packageManager": "yarn@4.17.0",
+	"dependencies": {
+		"@rbxts/services": "^1.6.0"
+	}
 }
